@@ -1,7 +1,7 @@
 plugins { id 'com.android.application' }
 
 // The app pulls the latest index.html from this repo on every launch (self-updating).
-def updateUrl = "https://raw.githubusercontent.com/devsenweb/domain-name-generator-app/main/mad-minute/app/src/main/assets/index.html"
+def updateUrl = "https://raw.githubusercontent.com/devsenweb/mad-minute/main/app/src/main/assets/index.html"
 
 android {
     namespace 'com.dhil.madminute'
@@ -10,8 +10,8 @@ android {
         applicationId 'com.dhil.madminute'
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName '1.1'
+        versionCode 3
+        versionName '1.2'
         buildConfigField 'String', 'UPDATE_URL', "\"${updateUrl}\""
     }
     buildFeatures { buildConfig true }
