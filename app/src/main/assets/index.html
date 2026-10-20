@@ -30,7 +30,7 @@ h1 span{background:var(--pencil);color:var(--pencil-ink);padding:0 .2em;border-r
 .sub{color:var(--muted);margin:4px 0 0;font-size:.95rem}
 .label{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin:0 0 8px}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-#timeSeg{grid-template-columns:repeat(3,1fr)}
+#timeSeg,#bigTimeSeg{grid-template-columns:repeat(3,1fr)}
 .seg button{font:600 1rem var(--body);padding:14px 10px;border-radius:12px;border:2px solid var(--key-edge);background:var(--card);color:var(--ink);cursor:pointer}
 .seg button small{display:block;font-weight:400;font-size:.78rem;color:var(--muted);margin-top:2px}
 .seg button[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
@@ -94,6 +94,17 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
   </div>
   <button class="go" id="start">Start</button>
   <div class="panel">
+    <p class="label">2-digit × 2-digit</p>
+    <p class="muted">10 problems like 34 × 27. Work them out on paper, then type the answer.</p>
+    <div class="seg" id="bigTimeSeg" style="margin:12px 0">
+      <button data-v="300" aria-pressed="true">5 min</button>
+      <button data-v="600" aria-pressed="false">10 min</button>
+      <button data-v="0" aria-pressed="false">No timer</button>
+    </div>
+    <button class="go" id="startBig" style="width:100%">Start 2-digit</button>
+    <p class="muted" id="bigBest" style="margin-top:10px"></p>
+  </div>
+  <div class="panel">
     <p class="label">Recent scores</p>
     <div class="hist" id="hist"></div>
   </div>
@@ -143,21 +154,36 @@ function lsSet(o){try{localStorage.setItem(LS,JSON.stringify(o))}catch(e){}}
 const saved=lsGet();
 runs=saved.runs||[];
 let mode=saved.mode||"all", secs=saved.secs||60;
+let bigSecs=saved.bigSecs!=null?saved.bigSecs:300;
 
 function setSeg(seg,val){seg.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v==String(val)))}
 $("modeSeg").onclick=e=>{const b=e.target.closest("button");if(!b)return;mode=b.dataset.v;setSeg($("modeSeg"),mode);lsSet({...lsGet(),mode})};
 $("timeSeg").onclick=e=>{const b=e.target.closest("button");if(!b)return;secs=+b.dataset.v;setSeg($("timeSeg"),secs);lsSet({...lsGet(),secs})};
-setSeg($("modeSeg"),mode);setSeg($("timeSeg"),secs);
+$("bigTimeSeg").onclick=e=>{const b=e.target.closest("button");if(!b)return;bigSecs=+b.dataset.v;setSeg($("bigTimeSeg"),bigSecs);lsSet({...lsGet(),bigSecs})};
+setSeg($("modeSeg"),mode);setSeg($("timeSeg"),secs);setSeg($("bigTimeSeg"),bigSecs);
 
 // miss weights from history (+ 8×4 from her last paper test)
 function missCounts(){
   const m={"4x8":2};
-  runs.slice(-15).forEach(r=>(r.missed||[]).forEach(k=>{m[k]=(m[k]||0)+1}));
+  runs.filter(r=>r.kind!=="big").slice(-15).forEach(r=>(r.missed||[]).forEach(k=>{m[k]=(m[k]||0)+1}));
   return m;
 }
 const key=(a,b)=>Math.min(a,b)+"x"+Math.max(a,b);
 
+function makeBigSet(){
+  // 11..99 each side; skip "both end in 0" (too easy) and repeats
+  const out=[],seen=new Set();
+  while(out.length<total){
+    const a=11+Math.floor(Math.random()*89), b=11+Math.floor(Math.random()*89);
+    if(a%10===0&&b%10===0)continue;
+    const k=key(a,b); if(seen.has(k))continue;
+    seen.add(k);out.push([a,b]);
+  }
+  return out;
+}
+
 function makeSet(only){
+  if(kind==="big"&&!(only&&only.length))return makeBigSet();
   const mc=missCounts(), pool=[];
   if(only&&only.length){only.forEach(k=>{const[a,b]=k.split("x").map(Number);pool.push([a,b,1])})}
   else for(let a=0;a<=9;a++)for(let b=0;b<=9;b++){
@@ -168,7 +194,7 @@ function makeSet(only){
     pool.push([a,b,w]);
   }
   const out=[];let last="";
-  while(out.length<30){
+  while(out.length<total){
     const tot=pool.reduce((s,p)=>s+p[2],0);let r=Math.random()*tot,pick=pool[0];
     for(const p of pool){r-=p[2];if(r<=0){pick=p;break}}
     let[a,b]=pick; if(Math.random()<.5)[a,b]=[b,a];
@@ -179,39 +205,42 @@ function makeSet(only){
 }
 
 let set=[],i=0,typed="",right=0,missed=[],timer=null,endAt=0,startAt=0,lock=null,running=false;
+let kind="facts",total=30,runSecs=60; // runSecs 0 = no timer
 function show(id){["home","run","done"].forEach(x=>$(x).hidden=x!==id);window.scrollTo(0,0)}
 function secsLabel(s){return s===90?"1½ min":(s/60)+" min"}
 function fmt(s){s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
 
-async function start(only){
+async function start(only,k){
+  kind=k||"facts";total=kind==="big"?10:30;runSecs=kind==="big"?bigSecs:secs;
   set=makeSet(only);i=0;typed="";right=0;missed=[];running=true;
   show("run");render();
-  startAt=Date.now();endAt=startAt+secs*1000;
+  startAt=Date.now();endAt=startAt+runSecs*1000;
   clearInterval(timer);timer=setInterval(tick,200);tick();
   try{lock=await navigator.wakeLock?.request("screen")}catch(e){}
 }
 function tick(){
+  if(!runSecs){$("clock").textContent=fmt((Date.now()-startAt)/1000);$("tbar").style.width="100%";return}
   const left=(endAt-Date.now())/1000;
   $("clock").textContent=fmt(left);$("clock").classList.toggle("low",left<=10);
-  $("tbar").style.width=Math.max(0,left/secs*100)+"%";
+  $("tbar").style.width=Math.max(0,left/runSecs*100)+"%";
   if(left<=0)finish();
 }
 function render(){
   const[a,b]=set[i];$("fact").textContent=a+" × "+b;$("ans").textContent=typed;
-  $("count").textContent=(i+1)+" / 30";
+  $("count").textContent=(i+1)+" / "+total;
 }
 function flash(cls){const p=$("prob");p.classList.remove("ok","bad");void p.offsetWidth;p.classList.add(cls);setTimeout(()=>p.classList.remove(cls),220)}
 function next(correct){
   const[a,b]=set[i];
   if(correct){right++;flash("ok")}else{missed.push({a,b,got:typed});flash("bad")}
   i++;typed="";
-  if(i>=30)finish();else render();
+  if(i>=total)finish();else render();
 }
 function press(k){
   if(!running)return;
   if(k==="del"){typed=typed.slice(0,-1);render();return}
   if(k==="skip"){typed="";next(false);return}
-  if(typed.length>=2)return;
+  if(typed.length>=4)return;
   typed+=k;render();
   const[a,b]=set[i],ans=String(a*b);
   if(typed.length>=ans.length)setTimeout(()=>next(typed===ans),120);
@@ -222,15 +251,15 @@ document.addEventListener("keydown",e=>{if($("run").hidden)return;if(/^\d$/.test
 function finish(){
   if(!running)return;running=false;clearInterval(timer);
   try{lock&&lock.release()}catch(e){}lock=null;
-  const used=Math.min(secs,Math.round((Date.now()-startAt)/1000));
+  const elapsed=Math.round((Date.now()-startAt)/1000), used=runSecs?Math.min(runSecs,elapsed):elapsed;
   // unanswered after time-up count as missed
-  for(let j=i;j<30;j++)missed.push({a:set[j][0],b:set[j][1],got:"",blank:true});
-  const run={at:Date.now(),mode,secs,score:right,total:30,used,missed:[...new Set(missed.map(m=>key(m.a,m.b)))]};
+  for(let j=i;j<total;j++)missed.push({a:set[j][0],b:set[j][1],got:"",blank:true});
+  const run={at:Date.now(),kind,mode,secs:runSecs,score:right,total,used,missed:[...new Set(missed.map(m=>key(m.a,m.b)))]};
   saveRun(run);
-  $("score").textContent=right+"/30";
-  const pct=Math.round(right/30*100);
+  $("score").textContent=right+"/"+total;
+  const pct=Math.round(right/total*100);
   $("verdict").textContent=pct>=97?"Perfect paper!":pct>=90?"That's an A!":pct>=80?"Getting fast!":"Keep practicing!";
-  $("detail").textContent=pct+"% · "+(i>=30?"finished in "+used+"s":"time ran out at #"+(i+1))+" · "+(mode==="focus"?"6s to 9s":"all facts")+", "+secsLabel(secs);
+  $("detail").textContent=pct+"% · "+(i>=total?"finished in "+fmt(used):"time ran out at #"+(i+1))+" · "+(kind==="big"?"2-digit × 2-digit":mode==="focus"?"6s to 9s":"all facts")+", "+(runSecs?secsLabel(runSecs):"no timer");
   const ml=$("misses");ml.textContent="";
   const shown=missed.filter(m=>!m.blank);
   const blanks=missed.length-shown.length;
@@ -238,10 +267,10 @@ function finish(){
   shown.forEach(m=>{const d=document.createElement("div");d.className="miss";d.textContent=m.a+" × "+m.b+" = "+(m.a*m.b);if(m.got){const s=document.createElement("s");s.textContent=m.got;d.appendChild(s)}ml.appendChild(d)});
   if(blanks){const d=document.createElement("p");d.className="muted";d.style.gridColumn="1/-1";d.textContent=blanks+" left when time ran out";ml.appendChild(d)}
   $("practice").hidden=!run.missed.length;
-  lastMissed=run.missed;
+  lastMissed=run.missed;lastKind=kind;
   show("done");
 }
-let lastMissed=[];
+let lastMissed=[],lastKind="facts";
 async function saveRun(run){
   runs.push(run);lsSet({...lsGet(),runs:runs.slice(-200)});renderHome();
   if(db){try{await db.collection("runs").add(run)}catch(e){}}
@@ -253,20 +282,23 @@ function renderHome(){
   recent.forEach(r=>{
     const row=document.createElement("div");row.className="row";
     const d=new Date(r.at);
-    const l=document.createElement("span");l.textContent=d.toLocaleDateString(undefined,{month:"short",day:"numeric"})+(r.mode==="focus"?" ·6–9":"")+(r.secs===120?" ·2m":r.secs===90?" ·1½m":"");
-    const bar=document.createElement("div");bar.className="bar";const fill=document.createElement("i");fill.style.width=(r.score/30*100)+"%";bar.appendChild(fill);
-    const s=document.createElement("b");s.textContent=r.score+"/30";
+    const l=document.createElement("span");l.textContent=d.toLocaleDateString(undefined,{month:"short",day:"numeric"})+(r.kind==="big"?" ·2d":(r.mode==="focus"?" ·6–9":"")+(r.secs===120?" ·2m":r.secs===90?" ·1½m":""));
+    const bar=document.createElement("div");bar.className="bar";const fill=document.createElement("i");fill.style.width=(r.score/(r.total||30)*100)+"%";bar.appendChild(fill);
+    const s=document.createElement("b");s.textContent=r.score+"/"+(r.total||30);
     row.append(l,bar,s);h.appendChild(row);
   });
+  const big=runs.filter(r=>r.kind==="big");
+  $("bigBest").textContent=big.length?"Best: "+Math.max(...big.map(r=>r.score))+"/10 · "+big.length+" tr"+(big.length===1?"y":"ies"):"";
   const w=$("weak");w.textContent="";
   const mc=missCounts();
   Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([k])=>{const[a,b]=k.split("x");const c=document.createElement("span");c.className="chip";c.textContent=b+" × "+a;w.appendChild(c)});
 }
 renderHome();
 
-$("start").onclick=()=>start();
-$("again").onclick=()=>start();
-$("practice").onclick=()=>start(lastMissed);
+$("start").onclick=()=>start(null,"facts");
+$("startBig").onclick=()=>start(null,"big");
+$("again").onclick=()=>start(null,lastKind);
+$("practice").onclick=()=>start(lastMissed,lastKind);
 $("home2").onclick=()=>show("home");
 $("quit").onclick=()=>{running=false;clearInterval(timer);try{lock&&lock.release()}catch(e){}show("home")};
 
