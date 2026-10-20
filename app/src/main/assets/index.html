@@ -72,7 +72,6 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 .cell.tot{grid-column:2/4;font-size:1.9rem}
 .cell.on{border:3px solid var(--pencil)}
 .cell.ok{border:2px solid var(--green);color:var(--green)}
-.cell.given{border:2px solid var(--pencil);color:var(--muted)}
 .cell.bad{border:2px solid var(--red);color:var(--red)}
 .ghint{font-size:.8rem;color:var(--muted);margin:8px 0 0}
 .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:auto}
@@ -132,7 +131,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 <div class="wrap" id="run" hidden>
   <div class="top"><span id="count">1 / 30</span><span class="clock" id="clock">1:00</span></div>
   <div class="timebar"><i id="tbar" style="width:100%"></i></div>
-  <div class="prob" id="prob"><div class="fact" id="fact">7 × 8</div><div class="ans" id="ans"></div><div class="grid" id="grid" hidden></div><p class="ghint" id="ghint" hidden>Split into tens and ones. Fill each box, then add them for the total.</p></div>
+  <div class="prob" id="prob"><div class="fact" id="fact">7 × 8</div><div class="ans" id="ans"></div><div class="grid" id="grid" hidden></div><p class="ghint" id="ghint" hidden>Split into tens and ones. Fill each box, then add the boxes up yourself for the total.</p></div>
   <div class="pad" id="pad">
     <button>7</button><button>8</button><button>9</button>
     <button>4</button><button>5</button><button>6</button>
@@ -251,7 +250,7 @@ function render(){
 // Box method: a = at+ao across the top, b = bt+bo down the side
 function setupCells(){
   const[a,b]=set[i],at=a-a%10,ao=a%10,bt=b-b%10,bo=b%10;
-  cells=[bt*at,bt*ao,bo*at,bo*ao,a*b].map(v=>({v,got:"",st:"",tries:0}));cur=0;
+  cells=[bt*at,bt*ao,bo*at,bo*ao,a*b].map(v=>({v,got:"",st:""}));cur=0;
 }
 function renderGrid(){
   const[a,b]=set[i],g=$("grid");g.textContent="";
@@ -278,9 +277,9 @@ function pressBig(k){
   if(c.got.length<want.length)return;
   if(cur===4){typed=c.got;busy=true;setTimeout(()=>{busy=false;next(typed===want)},150);return}
   if(c.got===want){c.st="ok";advance();return}
-  // wrong box: show red, let her try once more, then fill it in and move on
-  c.st="bad";c.tries++;busy=true;renderGrid();
-  setTimeout(()=>{busy=false;if(c.tries>=2){c.got=want;c.st="given";advance()}else{c.got="";c.st="";renderGrid()}},700);
+  // wrong box: show red, clear it and let her try again (never filled in for her)
+  c.st="bad";busy=true;renderGrid();
+  setTimeout(()=>{busy=false;c.got="";c.st="";renderGrid()},700);
 }
 function flash(cls){const p=$("prob");p.classList.remove("ok","bad");void p.offsetWidth;p.classList.add(cls);setTimeout(()=>p.classList.remove(cls),220)}
 function next(correct){
